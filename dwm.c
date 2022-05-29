@@ -1537,16 +1537,17 @@ void resize(Client *c, int x, int y, int w, int h, int interact) {
 void resizeclient(Client *c, int x, int y, int w, int h) {
   XWindowChanges wc;
 
-  c->oldx = c->x;
-  c->x = wc.x = x;
-  c->oldy = c->y;
-  c->y = wc.y = y;
-  c->oldw = c->w;
-  c->w = wc.width = w;
-  c->oldh = c->h;
-  c->h = wc.height = h;
+  c->oldx = c->x = wc.x = x;
+  c->oldy = c->y = wc.y = y;
+  c->oldw = c->w = wc.width = w;
+  c->oldh = c->h = wc.height = h;
   wc.border_width = c->bw;
-
+  if (nexttiled(c->mon->clients) == c && !nexttiled(c->next)
+	    && !c->isfullscreen) {
+		c->w = wc.width += c->bw * 2;
+		c->h = wc.height += c->bw * 2;
+		wc.border_width = 0;
+	}
   XConfigureWindow(dpy, c->win, CWX | CWY | CWWidth | CWHeight | CWBorderWidth,
                    &wc);
   configure(c);
