@@ -115,7 +115,6 @@ typedef struct {
 } Key;
 
 typedef struct {
-  const char *symbol;
   void (*arrange)(Monitor *);
 } Layout;
 
@@ -128,15 +127,12 @@ struct Monitor {
   int mx, my, mw, mh; /* screen size */
   int wx, wy, ww, wh; /* window area  */
   unsigned int seltags;
-  unsigned int sellt;
   unsigned int tagset[2];
-  int showbar;
-  int topbar;
   Client *clients;
   Client *sel;
   Client *stack;
   Monitor *next;
-  const Layout *lt[2];
+  const Layout *lt;
 };
 
 typedef struct {
@@ -299,6 +295,7 @@ static int xerrorstart(Display *dpy, XErrorEvent *ee);
 static void zoom(const Arg *arg);
 
 /* variables */
+static const Layout layout = { tile };    
 static const char broken[] = "broken";
 static int screen;
 static int sw, sh; /* X display screen geometry width, height */
@@ -856,7 +853,7 @@ int applysizehints(Client *c, int *x, int *y, int *w, int *h, int interact) {
     *h = bh;
   if (*w < bh)
     *w = bh;
-  if (resizehints || !c->mon->lt[c->mon->sellt]->arrange) {
+  if (resizehints || !c->mon->lt->arrange) {
     if (!c->hintsvalid)
       updatesizehints(c);
     /* see last two sentences in ICCCM 4.1.2.3 */
@@ -907,9 +904,8 @@ void arrange(Monitor *m) {
 }
 
 void arrangemon(Monitor *m) {
-  strncpy(m->ltsymbol, m->lt[m->sellt]->symbol, sizeof m->ltsymbol);
-  if (m->lt[m->sellt]->arrange)
-    m->lt[m->sellt]->arrange(m);
+  if (m->lt->arrange)
+    m->lt->arrange(m);
 }
 
 void attach(Client *c) {
@@ -951,12 +947,12 @@ void checkotherwm(void) {
 
 void cleanup(void) {
   Arg a = {.ui = ~0};
-  Layout foo = {"", NULL};
+  Layout foo = {NULL};
   Monitor *m;
   size_t i;
 
   view(&a);
-  selmon->lt[selmon->sellt] = &foo;
+  selmon->lt = &foo;
   for (m = mons; m; m = m->next)
     while (m->stack)
       unmanage(m->stack, 0);
@@ -1056,7 +1052,7 @@ void configurerequest(XEvent *e) {
   if ((c = wintoclient(ev->window))) {
     if (ev->value_mask & CWBorderWidth)
       c->bw = ev->border_width;
-    else if (!selmon->lt[selmon->sellt]->arrange) {
+    else if (!selmon->lt->arrange) {
       m = c->mon;
       if (ev->value_mask & CWX) {
         c->oldx = c->x;
@@ -1101,11 +1097,7 @@ Monitor *createmon(void) {
   m->tagset[0] = m->tagset[1] = 1;
   m->mfact = mfact;
   m->nmaster = nmaster;
-  m->showbar = showbar;
-  m->topbar = topbar;
-  m->lt[0] = &layouts[0];
-  m->lt[1] = &layouts[1 % LENGTH(layouts)];
-  strncpy(m->ltsymbol, layouts[0].symbol, sizeof m->ltsymbol);
+  m->lt = &layout;
   return m;
 }
 
@@ -1519,9 +1511,9 @@ void restack(Monitor *m) {
 
   if (!m->sel)
     return;
-  if (!m->lt[m->sellt]->arrange)
+  if (!m->lt->arrange)
     XRaiseWindow(dpy, m->sel->win);
-  if (m->lt[m->sellt]->arrange) {
+  if (m->lt->arrange) {
     wc.stack_mode = Below;
     for (c = m->stack; c; c = c->snext)
       if (ISVISIBLE(c)) {
@@ -1649,7 +1641,7 @@ void setfullscreen(Client *c, int fullscreen) {
 void setmfact(const Arg *arg) {
   float f;
 
-  if (!arg || !selmon->lt[selmon->sellt]->arrange)
+  if (!arg || !selmon->lt->arrange)
     return;
   f = arg->f < 1.0 ? arg->f + selmon->mfact : arg->f - 1.0;
   if (f < 0.05 || f > 0.95)
@@ -1742,7 +1734,7 @@ void showhide(Client *c) {
   if (ISVISIBLE(c)) {
     /* show clients top down */
     XMoveWindow(dpy, c->win, c->x, c->y);
-    if (!c->mon->lt[c->mon->sellt]->arrange && !c->isfullscreen)
+    if (!c->mon->lt->arrange && !c->isfullscreen)
       resize(c, c->x, c->y, c->w, c->h, 0);
     showhide(c->snext);
   } else {
@@ -2086,7 +2078,7 @@ int xerrorstart(Display *dpy, XErrorEvent *ee) {
 void zoom(const Arg *arg) {
   Client *c = selmon->sel;
 
-  if (!selmon->lt[selmon->sellt]->arrange)
+  if (!selmon->lt->arrange)
     return;
   if (c == nexttiled(selmon->clients))
     if (!c || !(c = nexttiled(c->next)))
