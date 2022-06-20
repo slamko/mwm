@@ -20,6 +20,7 @@
  *
  * To understand everything else, start reading main().
  */
+#include <X11/X.h>
 #include <X11/Xatom.h>
 #include <X11/Xft/Xft.h>
 #include <X11/Xlib.h>
@@ -114,16 +115,10 @@ typedef struct {
   const Arg arg;
 } Key;
 
-typedef struct {
-  void (*arrange)(Monitor *);
-} Layout;
-
 struct Monitor {
-  char ltsymbol[16];
   float mfact;
   int nmaster;
   int num;
-  int by;             /* bar geometry */
   int mx, my, mw, mh; /* screen size */
   int wx, wy, ww, wh; /* window area  */
   unsigned int seltags;
@@ -132,7 +127,6 @@ struct Monitor {
   Client *sel;
   Client *stack;
   Monitor *next;
-  const Layout *lt;
 };
 
 typedef struct {
@@ -213,7 +207,6 @@ static void applyrules(Client *c);
 static int applysizehints(Client *c, int *x, int *y, int *w, int *h,
                           int interact);
 static void arrange(Monitor *m);
-static void arrangemon(Monitor *m);
 static void attach(Client *c);
 static void attachstack(Client *c);
 static void buttonpress(XEvent *e);
@@ -295,7 +288,6 @@ static int xerrorstart(Display *dpy, XErrorEvent *ee);
 static void zoom(const Arg *arg);
 
 /* variables */
-static const Layout layout = { tile };    
 static const char broken[] = "broken";
 static int screen;
 static int sw, sh; /* X display screen geometry width, height */
@@ -308,15 +300,14 @@ static void (*handler[LASTEvent])(XEvent *) = {
     [ClientMessage] = clientmessage,
     [ConfigureRequest] = configurerequest,
     [ConfigureNotify] = configurenotify,
-    [DestroyNotify] = destroynotify,
-    [EnterNotify] = enternotify,
+	[DestroyNotify] = destroynotify,
+	[MotionNotify] = motionnotify,
+	[EnterNotify] = enternotify,
     [FocusIn] = focusin,
     [KeyPress] = keypress,
     [MappingNotify] = mappingnotify,
     [MapRequest] = maprequest,
-    [MotionNotify] = motionnotify,
-    [PropertyNotify] = propertynotify,
-    [UnmapNotify] = unmapnotify};
+    [PropertyNotify] = propertynotify};
 static Atom wmatom[WMLast], netatom[NetLast];
 static int running = 1;
 static Cur *cursor[CurLast];
@@ -853,7 +844,7 @@ int applysizehints(Client *c, int *x, int *y, int *w, int *h, int interact) {
     *h = bh;
   if (*w < bh)
     *w = bh;
-  if (resizehints || !c->mon->lt->arrange) {
+  if (resizehints) {
     if (!c->hintsvalid)
       updatesizehints(c);
     /* see last two sentences in ICCCM 4.1.2.3 */
@@ -896,16 +887,11 @@ void arrange(Monitor *m) {
     for (m = mons; m; m = m->next)
       showhide(m->stack);
   if (m) {
-    arrangemon(m);
+    tile(m);
     restack(m);
   } else
     for (m = mons; m; m = m->next)
-      arrangemon(m);
-}
-
-void arrangemon(Monitor *m) {
-  if (m->lt->arrange)
-    m->lt->arrange(m);
+      tile(m);
 }
 
 void attach(Client *c) {
@@ -947,12 +933,10 @@ void checkotherwm(void) {
 
 void cleanup(void) {
   Arg a = {.ui = ~0};
-  Layout foo = {NULL};
   Monitor *m;
   size_t i;
 
   view(&a);
-  selmon->lt = &foo;
   for (m = mons; m; m = m->next)
     while (m->stack)
       unmanage(m->stack, 0);
@@ -1052,30 +1036,7 @@ void configurerequest(XEvent *e) {
   if ((c = wintoclient(ev->window))) {
     if (ev->value_mask & CWBorderWidth)
       c->bw = ev->border_width;
-    else if (!selmon->lt->arrange) {
-      m = c->mon;
-      if (ev->value_mask & CWX) {
-        c->oldx = c->x;
-        c->x = m->mx + ev->x;
-      }
-      if (ev->value_mask & CWY) {
-        c->oldy = c->y;
-        c->y = m->my + ev->y;
-      }
-      if (ev->value_mask & CWWidth) {
-        c->oldw = c->w;
-        c->w = ev->width;
-      }
-      if (ev->value_mask & CWHeight) {
-        c->oldh = c->h;
-        c->h = ev->height;
-      }
-      if ((ev->value_mask & (CWX | CWY)) &&
-          !(ev->value_mask & (CWWidth | CWHeight)))
-        configure(c);
-      if (ISVISIBLE(c))
-        XMoveResizeWindow(dpy, c->win, c->x, c->y, c->w, c->h);
-    } else
+    else
       configure(c);
   } else {
     wc.x = ev->x;
@@ -1097,7 +1058,6 @@ Monitor *createmon(void) {
   m->tagset[0] = m->tagset[1] = 1;
   m->mfact = mfact;
   m->nmaster = nmaster;
-  m->lt = &layout;
   return m;
 }
 
@@ -1349,11 +1309,6 @@ void manage(Window w, XWindowAttributes *wa) {
     c->y = c->mon->my + c->mon->mh - HEIGHT(c);
   c->x = MAX(c->x, c->mon->mx);
   /* only fix client y-offset, if the client center might cover the bar */
-  c->y = MAX(c->y,
-             ((c->mon->by == c->mon->my) && (c->x + (c->w / 2) >= c->mon->wx) &&
-              (c->x + (c->w / 2) < c->mon->wx + c->mon->ww))
-                 ? bh
-                 : c->mon->my);
   c->bw = borderpx;
 
   wc.border_width = c->bw;
@@ -1511,16 +1466,13 @@ void restack(Monitor *m) {
 
   if (!m->sel)
     return;
-  if (!m->lt->arrange)
-    XRaiseWindow(dpy, m->sel->win);
-  if (m->lt->arrange) {
-    wc.stack_mode = Below;
-    for (c = m->stack; c; c = c->snext)
-      if (ISVISIBLE(c)) {
-        XConfigureWindow(dpy, c->win, CWSibling | CWStackMode, &wc);
-        wc.sibling = c->win;
-      }
-  }
+  
+  wc.stack_mode = Below;
+  for (c = m->stack; c; c = c->snext)
+    if (ISVISIBLE(c)) {
+      XConfigureWindow(dpy, c->win, CWSibling | CWStackMode, &wc);
+      wc.sibling = c->win;
+    }    
   XSync(dpy, False);
   while (XCheckMaskEvent(dpy, EnterWindowMask, &ev))
     ;
@@ -1641,8 +1593,6 @@ void setfullscreen(Client *c, int fullscreen) {
 void setmfact(const Arg *arg) {
   float f;
 
-  if (!arg || !selmon->lt->arrange)
-    return;
   f = arg->f < 1.0 ? arg->f + selmon->mfact : arg->f - 1.0;
   if (f < 0.05 || f > 0.95)
     return;
@@ -1734,8 +1684,6 @@ void showhide(Client *c) {
   if (ISVISIBLE(c)) {
     /* show clients top down */
     XMoveWindow(dpy, c->win, c->x, c->y);
-    if (!c->mon->lt->arrange && !c->isfullscreen)
-      resize(c, c->x, c->y, c->w, c->h, 0);
     showhide(c->snext);
   } else {
     /* hide clients bottom up */
@@ -2037,7 +1985,6 @@ Client *wintoclient(Window w) {
 Monitor *wintomon(Window w) {
   int x, y;
   Client *c;
-  Monitor *m;
 
   if (w == root && getrootptr(&x, &y))
     return recttomon(x, y, 1, 1);
@@ -2078,8 +2025,6 @@ int xerrorstart(Display *dpy, XErrorEvent *ee) {
 void zoom(const Arg *arg) {
   Client *c = selmon->sel;
 
-  if (!selmon->lt->arrange)
-    return;
   if (c == nexttiled(selmon->clients))
     if (!c || !(c = nexttiled(c->next)))
       return;
