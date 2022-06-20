@@ -71,4 +71,4 @@ uninstall:
 	rm -f ${DESTDIR}${PREFIX}/bin/mwm\
 		${DESTDIR}${MANPREFIX}/man1/mwm.1
 
-.PHONY: all options clean dist install uninstall
+.PHONY: all options mwm clean dist install uninstall
