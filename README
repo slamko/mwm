@@ -1,48 +1,21 @@
-dwm - dynamic window manager
-============================
-dwm is an extremely fast, small, and dynamic window manager for X.
+mwm - micro window manager
+==========================
 
+In a nutshell it is a fork of dwm with some personal modifications, basic patches, and with more then 30% of code base removed.  
 
-Requirements
-------------
-In order to build dwm you need the Xlib header files.
+The project intends to bring the simplest possible window manager which is, at the same time, usable out of the box.  
 
+Dwm has really messed code base just to fit in 2000 lines of code (which they didn't manage to do)  
 
-Installation
-------------
-Edit config.mk to match your local setup (dwm is installed into
-the /usr/local namespace by default).
+Dwm claims that they are naturally suckless and at the same time they include floating and monocle(wtf) layout and top bar panel  
+out of the box which seems quite contraty...  
 
-Afterwards enter the following command to build and install dwm (if
-necessary as root):
+At the same time dwm misses some pretty basic functionality like autostarting applications and some basic keybindings which people  
+just copy to their configs from the internet...  
 
-    make clean install
+==================================================================================================================================
 
-
-Running dwm
------------
-Add the following line to your .xinitrc to start dwm using startx:
-
-    exec dwm
-
-In order to connect dwm to a specific display, make sure that
-the DISPLAY environment variable is set correctly, e.g.:
-
-    DISPLAY=foo.bar:1 exec dwm
-
-(This will start dwm on display :1 of the host foo.bar.)
-
-In order to display status info in the bar, you can do something
-like this in your .xinitrc:
-
-    while xsetroot -name "`date` `uptime | sed 's/.*,//'`"
-    do
-    	sleep 1
-    done &
-    exec dwm
-
-
-Configuration
--------------
-The configuration of dwm is done by creating a custom config.h
-and (re)compiling the source code.
+On the other hand mwm has all of its code in a single file mwm.c which you could study and modify.  
+It has only tiling layout whithout an option do add another one.  
+It also brings most popular key bindings by default and uses Super button as a main key.  
+And also... mwm has no top bar panel and has no config option to enable it...
